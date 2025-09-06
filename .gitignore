@@ -1,3 +1,5 @@
 *.o
 tests
 input.txt
+.vscode
+*.c~
