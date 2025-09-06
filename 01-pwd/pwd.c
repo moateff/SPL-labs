@@ -12,14 +12,15 @@ int pwd_main()
 
     // Get current working directory
     if (getcwd(cwd, sizeof(cwd)) != NULL) {
-        ssize_t ret = write(STDOUT_FILENO, cwd, strlen(cwd));
-        if (ret < 0) {
+        size_t len = strlen(cwd);
+        ssize_t ret = write(STDOUT_FILENO, cwd, len);
+        if (ret != (ssize_t) len) {
             perror("write");
             return 1;
         }
 
         ret = write(STDOUT_FILENO, "\n", 1);
-        if (ret < 0) {
+        if (ret != 1) {
             perror("write");
             return 1;
         }
