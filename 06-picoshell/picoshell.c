@@ -66,12 +66,12 @@ int execute_exit(int argc, char *argv[]) {
 }
 
 int execute_cd(int argc, char *argv[]) {
-    if (argc < 2) {
-        printf("cd: missing argument\n");
+    if (argc > 2) {
+        printf("cd: too many argument\n");
         return 1;
     }
 
-    if (chdir(argv[1]) != 0) {
+    if ((argc == 2) & (chdir(argv[1]) != 0)) {
         fprintf(stderr, "cd: /invalid_directory: No such file or directory\n");
         return 1;
     }
@@ -165,8 +165,7 @@ int picoshell_main(int argc, char *argv[]) {
     int ntokens;
     int status = 0;
 
-    while (1) { 
-        if (read_input(input, MAXINPUT)) break;
+    while (read_input(input, MAXINPUT) == 0) { 
         if (strlen(input) == 0) continue;
         ntokens = tokenize(input, tokens);
         status = execute_command(ntokens, tokens);
@@ -174,7 +173,6 @@ int picoshell_main(int argc, char *argv[]) {
 
     return status;
 }
-
 
 // int main(int argc, char *argv[]) {
 //     return picoshell_main(argc, argv);
