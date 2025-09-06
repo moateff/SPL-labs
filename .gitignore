@@ -3,3 +3,4 @@ tests
 input.txt
 .vscode
 *.c~
+a.out
