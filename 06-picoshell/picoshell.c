@@ -25,21 +25,9 @@ CommandType get_command_type(const char *cmd) {
     return CMD_UNKNOWN;
 }
 
-void prompt() {
-    printf("$ "); 
-    /*
-    char cwd[MAXPATH];
-    if (getcwd(cwd, sizeof(cwd)) != NULL) {
-        printf("%s$ ", cwd); 
-    } else {
-        printf("$ ");  
-    }
-    */
-    fflush(stdout);
-}
-
 int read_input(char *buffer, size_t size) {
-    prompt(); 
+    printf("picoshell$ "); 
+    fflush(stdout);
 
     if (fgets(buffer, size, stdin) == NULL) {
         return 1;  // EOF or error
@@ -66,7 +54,7 @@ int tokenize(char *input, char *tokens[]) {
     return count;
 }
 
-int exit_shell(int argc, char *argv[]) {
+int execute_exit(int argc, char *argv[]) {
     int status = 0;
 
     if (argc > 1) {
@@ -77,8 +65,7 @@ int exit_shell(int argc, char *argv[]) {
     exit(status);
 }
 
-
-int cd(int argc, char *argv[]) {
+int execute_cd(int argc, char *argv[]) {
     if (argc < 2) {
         printf("cd: missing argument\n");
         return 1;
@@ -92,8 +79,7 @@ int cd(int argc, char *argv[]) {
     return 0;
 }
 
-
-int pwd(int argc, char *argv[])
+int execute_pwd(int argc, char *argv[])
 {
     char cwd[MAXPATH];
 
@@ -105,7 +91,7 @@ int pwd(int argc, char *argv[])
     return 1;
 }
 
-int echo(int argc, char *argv[])
+int execute_echo(int argc, char *argv[])
 {
     for (int i = 1; i < argc; i++) {
         printf("%s", argv[i]);
@@ -154,16 +140,16 @@ int execute_command(int argc, char *argv[]) {
 
     switch (get_command_type(argv[0])) {
         case CMD_EXIT:
-            status = exit_shell(argc, argv);
+            status = execute_exit(argc, argv);
             break;
         case CMD_CD:
-            status  = cd(argc, argv);
+            status = execute_cd(argc, argv);
             break;
         case CMD_PWD:
-            status = pwd(argc, argv);
+            status = execute_pwd(argc, argv);
             break;
         case CMD_ECHO:
-            status = echo(argc, argv);
+            status = execute_echo(argc, argv);
             break;
         default:
             status = execute_program(argc, argv);
@@ -172,7 +158,6 @@ int execute_command(int argc, char *argv[]) {
 
     return status;
 }
-
 
 int picoshell_main(int argc, char *argv[]) {
     char input[MAXINPUT];
