@@ -4,6 +4,8 @@
 #include <string.h>
 #include <ctype.h>
 #include <fcntl.h>
+#include <signal.h>
+#include <pwd.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
@@ -12,6 +14,13 @@
 #define MAXBUFF 10240
 #define MAXTOKENS 1024
 #define MAXPATH 4096
+#define MAXHOSTNAME 256
+
+#define COLOR_GREEN  "\033[1;32m"       // green
+#define COLOR_BLUE   "\033[1;34m"       // blue
+#define COLOR_RESET  "\033[0m"  // reset to default
+
+volatile sig_atomic_t child_exited = 0; // flag set in signal handler
 
 extern char **environ;
 
@@ -285,10 +294,39 @@ void restore_redirection(RedirSave * save)
     close(save->saved_stderr);
 }
 
+void print_prompt()
+{
+    char hostname[MAXHOSTNAME + 1];
+    char cwd[PATH_MAX];
+    struct passwd *pw = getpwuid(getuid());
+
+    char *username = pw ? pw->pw_name : "user";
+
+    if (gethostname(hostname, sizeof(hostname)) != 0) {
+        strcpy(hostname, "host");
+    }
+
+    if (getcwd(cwd, sizeof(cwd)) == NULL) {
+        strcpy(cwd, "?");
+    } else {
+        const char *home = getenv("HOME");
+        if (home && strncmp(cwd, home, strlen(home)) == 0) {
+            // Replace $HOME with ~
+            char tmp[PATH_MAX];
+            snprintf(tmp, sizeof(tmp), "~%s", cwd + strlen(home));
+            strcpy(cwd, tmp);
+        }
+    }
+
+    printf(COLOR_BLUE "%s" "@" COLOR_RESET
+           COLOR_BLUE "%s" COLOR_RESET ":"
+           COLOR_GREEN "%s" COLOR_RESET "$ ", username, hostname, cwd);
+    fflush(stdout);
+}
+
 int read_input(char *buffer, size_t size)
 {
-    printf("nanoshell$ ");
-    fflush(stdout);
+    print_prompt();
 
     if (fgets(buffer, size, stdin) == NULL) {
         return 1;               // EOF or error
@@ -430,17 +468,19 @@ int execute_setvar_command(int argc, char *argv[])
     free(name);
     free(value);
 
-    return 0; 
+    return 0;
 }
 
-int execvpe(const char *file, char *const argv[], char *const envp[]) {
+int execvpe(const char *file, char *const argv[], char *const envp[])
+{
     if (strchr(file, '/')) {
         execve(file, argv, envp);
         return 1;
     }
 
     char *path = getenv("PATH");
-    if (!path) path = "/bin:/usr/bin";
+    if (!path)
+        path = "/bin:/usr/bin";
 
     char *p = strdup(path);
     char *dir = strtok(p, ":");
@@ -451,7 +491,7 @@ int execvpe(const char *file, char *const argv[], char *const envp[]) {
         dir = strtok(NULL, ":");
     }
     free(p);
-    return 1; 
+    return 1;
 }
 
 int execute_program(int argc, char *argv[])
@@ -521,12 +561,6 @@ int execute_command(int argc, char *argv[])
         return 1;
     }
 
-    /*
-       printf("argc = %d\n", argc);
-       for (int i = 0; i < argc; i++){
-       printf("argv[%d] = %s\n", i, argv[i]);
-       }
-     */
     switch (get_command_type(argc, argv)) {
     case BUILTIN_CMD:
         status = execute_builtin_command(argc, argv);
@@ -543,6 +577,16 @@ int execute_command(int argc, char *argv[])
     return status;
 }
 
+void reap_child_zombie(void)
+{
+    int status;
+    pid_t pid;
+    while ((pid = waitpid(-1, &status, WNOHANG)) > 0) {
+        printf("Child process %d terminated\n", pid);
+        fflush(stdout);
+    }
+}
+
 int microshell_main(int argc, char *argv[])
 {
     char buffer[MAXBUFF];
@@ -553,21 +597,41 @@ int microshell_main(int argc, char *argv[])
         if (strlen(buffer) == 0)
             continue;
         ntokens = tokenize(buffer, tokens);
-        /*
-           printf("ntokens = %d\n", ntokens);
-           for (int i = 0; i < ntokens; i++){
-           printf("token[%d] = %s\n", i, tokens[i]);
-           }
-         */
         status = execute_command(ntokens, tokens);
+
+        if (child_exited) {
+            reap_child_zombie();
+            child_exited = 0;
+        }
     }
 
     return status;
 }
 
-/*
-int main(int argc, char *argv[]) 
+void setup_environment(void)
 {
-    return microshell_main(argc, argv);
+    chdir(getenv("HOME"));
 }
-*/
+
+void sigchld_handler(int signo)
+{
+    (void) signo;               // unused
+    child_exited = 1;           // just set a flag
+}
+
+void register_child_signal(void)
+{
+    if (signal(SIGCHLD, sigchld_handler) == SIG_ERR) {
+        perror("signal");
+        exit(EXIT_FAILURE);
+    }
+}
+
+int main(int argc, char *argv[])
+{
+    register_child_signal();
+    setup_environment();
+    microshell_main(argc, argv);
+
+    return 0;
+}
